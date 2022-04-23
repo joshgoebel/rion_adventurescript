@@ -153,10 +153,13 @@ export class Parser {
         }
         if (this.is("colon")) {
           this.parseObject({id})
+          continue
         } else if (this.is("pointer")) {
           this.parseIdentPointerValue(id)
+          continue
         } else if (this.is("assignment")) {
           this.parseIdentEqualsValue(id)
+          continue
         } else if (this.is("openBracket")) {
           this.advance()
           console.log("open bracket for context: ", id)
@@ -164,11 +167,9 @@ export class Parser {
           collection._inline = false
           this.top[id] = collection
           this.pushContext(collection)
+          // this.parseObject({id})
           continue
-        } else {
-          this.unexpectedToken();    
         }
-        continue
       }
 
       this.unexpectedToken();
@@ -221,7 +222,7 @@ export class Parser {
     this.eatWS()
     let s = null
     if (this.is("string")) {
-      s = this.eat("string")
+      s = {...this.eat("string"), _token: true }
     }
     this.eatWS()
     let o = {
@@ -238,7 +239,7 @@ export class Parser {
   }
   parseStringOrArray() {
     if (this.is("string")) {
-      return this.eat("string")
+      return {...this.eat("string"), _token: true}
     }
     if (this.is("openArray")) {
       let tokens = []

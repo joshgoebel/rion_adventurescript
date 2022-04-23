@@ -1,6 +1,7 @@
 import fs from "fs";
 import { Lexer } from "./src/lexer.js";
 import { Parser } from "./src/parser.js";
+import { Printer } from "./src/printer.js";
 
 const data = fs.readFileSync('../island/island.adv', { encoding: 'utf8', flag: 'r' });
 
@@ -16,4 +17,7 @@ for (const t of tokens) {
 
 const parser = new Parser(lexer)
 parser.parse()
-console.dir(parser.data, {depth: null})
+// console.dir(parser.data, {depth: null})
+console.log()
+const printer = new Printer(parser.data)
+printer.print()
