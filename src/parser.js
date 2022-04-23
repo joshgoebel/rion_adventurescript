@@ -48,22 +48,37 @@ export class Parser {
   }
   get tokens() { return this.lexer.tokens }
   isPreviousSig(type) {
-    let i = this.index
+    let i = this.index - 1
+    // console.log("index is", this.index, "i is", i)
     while (i >= 0) {
       if (
         this.tokens[i].type === "whitespace" ||
         this.tokens[i].type === "newline"
       ) {
         i -= 1
+        console.log("seeking backwards")
         continue;
       }
-
+      console.log("previous sig", this.tokens[i].type)
       return this.tokens[i].type === type
     }
     return false;
   }
+  popContext() {
+    console.log("closing bracket, leaving context:", this.top._id)
+    this.stack.pop()
+    console.log("STACK LEN", this.stack.length)
+    console.log("STACK", this.stack.map(x => x._id))
+  }
+  pushContext(context) {
+    console.log("pushing context:", context._id)
+    this.stack.push(context)
+    console.log("STACK LEN", this.stack.length)
+    console.log("STACK", this.stack.map(x => x._id))
+  }
   parse() {
     this.data = this.newCollection()
+    this.data._id = "_root"
     this.stack = [this.data]
     while (!this.isEOF) {
       if (this.is("comment")) { this.skip(); continue }
@@ -75,16 +90,43 @@ export class Parser {
           this.error("closing bracket, but no collection to close")
         }
         this.eat("closeBracket")
-        this.stack.pop()
+        this.popContext()        
+        
+        continue
+      }
+      // parseObject already should have opened a context
+      // on the stack for us, so we just need to skip over this
+      if (this.is("openBracket")) {
+        this.eat("openBracket")
+        if (this.top._inline) { this.top._inline = false }
+        continue
+      }
+      if (this.is("openParen")) {
+        // console.log("FOUND OPEN PAREN")
+        let tokens = this.eatExpression();
+        // assume an expression we find is a value for the most
+        // recently opened context
+        if (this.top._value === null) {
+          this.top._value = tokens
+        }
         continue
       }
       // end of a non {} item/line
       // although these are also allowed to fllow after the {} also
       if (this.is("semicolon")) {
+        let canSafelyIgnore = this.isPreviousSig("closeBracket")
         this.eat("semicolon")
-        if (this.isPreviousSig("closeBracket")) continue;
+        if (canSafelyIgnore) {
+          console.log("safely ignoring ;")
+          continue;
+        }
 
-        this.stack.pop()
+        if (this.top._inline) {
+          console.log("semicolon!")
+          this.popContext()
+        } else {
+          console.log("safely ignoring, not inline")
+        }
         continue
       }
       // unnamed object
@@ -101,9 +143,12 @@ export class Parser {
           this.parseIdentEqualsValue(name)
         } else if (this.is("openBracket")) {
           this.skip()
+          console.log("open bracket for context: ", name)
           let collection = this.newCollection()
-          this.data[name] = collection
-          this.stack.push(collection)
+          collection._id = name
+          collection._inline = false
+          this.top[name] = collection
+          this.pushContext(collection)
           continue
         } else {
           this.unexpectedToken();    
@@ -130,29 +175,28 @@ export class Parser {
     // console.log(toMatch, args);
     return toMatch.join(":") === args.join(":")
   }
-  eatStringOrExpression() {
-    if (this.is("string")) {
-      return this.eat("string");
-    } else if (this.isSig("openBracket","openParen")) {
-      console.log("found COMBO")
+  eatExpression() {
+    if (this.isSig("openParen")) {
+      // console.log("found COMBO")
       let tokens = []
+      let depth = 0
       while (!this.isEOF) {
-        if (this.is("closeParen")) {
-          if (this.isSig("closeParen","closeBracket")) break;
-        }
-        console.log(this.peek())
+        if (this.is("closeParen") && depth===1) { break }
+        if (this.is("closeParen")) { depth-=1 }
+        if (this.is("openParen")) { depth+=1 }
+        // console.log("inside expr", this.peek(), depth)
         tokens.push(this.peek())
         this.skip()  
       }
       tokens.push(this.peek())
       this.eat("closeParen")
-      this.eatWS()
-      tokens.push(this.peek())
-      this.eat("closeBracket")
-      this.eatWS()
+      // this.eatWS()
+      // tokens.push(this.peek())
+      // this.eat("closeBracket")
+      // this.eatWS()
       return tokens
     } else {
-      this.error("expecting a string or {( )} expression combo");
+      this.error("expecting a () expression");
     }
   }
   parseObject(id) {
@@ -160,26 +204,31 @@ export class Parser {
     this.eatWS()
     let type = this.eat("ident")
     this.eatWS()
-    let s = this.eatStringOrExpression()
+    let s = null
+    if (this.is("string")) {
+      s = this.eat("string")
+    }
     this.eatWS()
     let o = {
       _id: id,
       _type: type.raw,
       _value: s,
+      _inline: true,
       _items: []
     }
     this.top._items.push(o)
-    this.stack.push(o)
-
-    // if (this.is("semicolon")) { 
-    //   this.skip()
-    // }
-    console.log(o)
+    this.pushContext(o)
+    // this.stack.push(o)
+    // console.log(o)
   }
   parseIdentEqualsValue(name) {
     this.skip() // assignment
     this.eatWS()
     let s = this.eat("string")
+    // semi-colon after assigment is a NO-OP
+    // while (this.is("semicolon")) {
+    //   this.eat("semicolon");
+    // }
     this.top[name] = s
   }
   parseGlobal() {
@@ -201,11 +250,12 @@ export class Parser {
   error(msg) {
     console.dir(this.data, {depth: null})
     console.log("context")
-    this.tokens[this.index].broken="HERE"
-    console.log(this.tokens.splice(this.index-3, 6))
+    if (this.tokens[this.index])
+      this.tokens[this.index].broken="HERE"
+    console.log(this.tokens.splice(this.index-6, 10))
     throw(msg)
   }
   get isEOF() {
-    this.index >= this.tokens.length
+    return this.index >= this.tokens.length
   }
 }

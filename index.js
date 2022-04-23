@@ -16,4 +16,4 @@ for (const t of tokens) {
 
 const parser = new Parser(lexer)
 parser.parse()
-console.log(parser.data)
+console.dir(parser.data, {depth: null})
