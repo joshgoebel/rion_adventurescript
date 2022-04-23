@@ -3,6 +3,9 @@ export class Parser {
 		this.lexer = lexer
     this.index = 0;
 	}
+  get isEOF() {
+    return this.index >= this.tokens.length
+  }
   // stack
   get top() {
     return this.stack[this.stack.length-1]
@@ -65,16 +68,16 @@ export class Parser {
     return false;
   }
   popContext() {
-    console.log("closing bracket, leaving context:", this.top._id)
+    // console.log("closing bracket, leaving context:", this.top._id)
     this.stack.pop()
-    console.log("STACK LEN", this.stack.length)
-    console.log("STACK", this.stack.map(x => x._id))
+    // console.log("STACK LEN", this.stack.length)
+    // console.log("STACK", this.stack.map(x => x._id))
   }
   pushContext(context) {
-    console.log("pushing context:", context._id)
+    // console.log("pushing context:", context._id)
     this.stack.push(context)
-    console.log("STACK LEN", this.stack.length)
-    console.log("STACK", this.stack.map(x => x._id))
+    // console.log("STACK LEN", this.stack.length)
+    // console.log("STACK", this.stack.map(x => x._id))
   }
   parse() {
     this.data = this.newCollection()
@@ -137,8 +140,18 @@ export class Parser {
       if (this.is("ident")) {
         let name = this.consume().raw
         this.eatWS()
+        // TODO: FIX THIS, it's a huge hack
+        while (this.isSig("comma","ident")) {
+          console.log("SKIPPING MULTI_ARRAY")
+          this.eat("comma")
+          this.eatWS()
+          this.eat("ident")
+          this.eatWS()
+        }
         if (this.is("colon")) {
           this.parseObject(name)
+        } else if (this.is("pointer")) {
+          this.parseIdentPointerValue(name)
         } else if (this.is("assignment")) {
           this.parseIdentEqualsValue(name)
         } else if (this.is("openBracket")) {
@@ -221,10 +234,42 @@ export class Parser {
     // this.stack.push(o)
     // console.log(o)
   }
+  parseStringOrArray() {
+    if (this.is("string")) {
+      return this.eat("string")
+    }
+    if (this.is("openArray")) {
+      let tokens = []
+      while (!this.isEOF) {
+        if (this.is("closeArray")) break;
+        tokens.push(this.peek())
+        this.skip()
+      }
+      tokens.push(this.peek())
+      this.eat("closeArray")
+      return {
+        _array: true,
+        _tokens: tokens
+      }
+    }
+    this.error("expecting string or array for assignment")
+  }
   parseIdentEqualsValue(name) {
     this.skip() // assignment
     this.eatWS()
-    let s = this.eat("string")
+
+    let s = this.parseStringOrArray()
+    // semi-colon after assigment is a NO-OP
+    // while (this.is("semicolon")) {
+    //   this.eat("semicolon");
+    // }
+    this.top[name] = s
+  }
+  parseIdentPointerValue(name) {
+    this.skip() // pointer
+    this.eatWS()
+
+    let s = this.eatExpression()
     // semi-colon after assigment is a NO-OP
     // while (this.is("semicolon")) {
     //   this.eat("semicolon");
@@ -254,8 +299,5 @@ export class Parser {
       this.tokens[this.index].broken="HERE"
     console.log(this.tokens.splice(this.index-6, 10))
     throw(msg)
-  }
-  get isEOF() {
-    return this.index >= this.tokens.length
   }
 }

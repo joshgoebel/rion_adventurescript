@@ -11,7 +11,7 @@ const tokens = lexer.tokens
 // console.log("unknown", tokens.filter(x => x.type =="unknown").length)
 // console.log(tokens.filter(x => x.type =="unknown"))
 for (const t of tokens) {
-  // console.log(t)
+  console.log(t)
 }
 
 const parser = new Parser(lexer)

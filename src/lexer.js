@@ -2,6 +2,7 @@
 const SIMPLE_TOKENS = [
   [ "comment", /#.*(?=\n)/ ],
   [ "comment", /\/\/.*(?=\n)/ ],
+  [ "comment", /\/\*.*?\*\// ],
   [ "global", /__[a-z]+[a-z0-9_]*/ ],
   [ "ident", /[a-z]+[a-z_0-9]*/ ],
   [ "newline", /\n/ ],
@@ -50,7 +51,7 @@ export class Lexer {
         this.lexLiteralString();
         continue;
       }
-      if (this.peek(/=/)) {
+      if (this.peek(/=(?!=)/)) {
         this.lexAssignment();
         continue;
       }
@@ -81,8 +82,9 @@ export class Lexer {
   lexAssignment() {
     this.tokenize("assignment",/=/)
     this.eatWhitespace();
-    // for normal brackets or string literals, we don't nede special handling
-    if (this.peek(/\{|\"/)) return;
+    // for normal brackets or string literals or arrays, 
+    // we don't nede special handling
+    if (this.peek(/\{|\"|\[/)) return;
 
     if (this.peek(/\\/)) {
       // TODO: fix this
