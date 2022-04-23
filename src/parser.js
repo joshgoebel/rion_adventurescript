@@ -1,3 +1,5 @@
+const DEBUG = false
+
 export class Parser {
 	constructor(lexer) {
 		this.lexer = lexer
@@ -12,15 +14,14 @@ export class Parser {
   }
 
   // parser
-
-  peek(offset = 0) {
+  peek() {
     if (this.isEOF) return null;
 
-    return this.tokens[this.index + offset];
+    return this.tokens[this.index];
   }
   consume() {
     let v = this.peek()
-    this.skip()
+    this.advance()
     return v
   }
   is(type) {
@@ -28,26 +29,23 @@ export class Parser {
 
     return this.peek().type === type
   }
-  next() {
-    this.index += 1
-  }
-  skip() {
+  advance() {
     this.index += 1
   }
   eatWS() {
-    while (!this.isEOF && (this.is("whitespace") || this.is("newline"))) {
-      this.skip();
-      }
+    while (this.is("whitespace") || this.is("newline")) {
+      this.advance();
+    }
   }
   eat(type) {
     if (!this.is(type)) this.raiseExpected(type)
 
     let v = this.peek()
-    this.skip()  
+    this.advance()  
     return v
   }
-  newCollection() {
-    return { _items: [] };
+  newCollection({id}) {
+    return { _id: id, _items: [] };
   }
   get tokens() { return this.lexer.tokens }
   isPreviousSig(type) {
@@ -59,17 +57,19 @@ export class Parser {
         this.tokens[i].type === "newline"
       ) {
         i -= 1
-        console.log("seeking backwards")
+        // console.log("seeking backwards")
         continue;
       }
-      console.log("previous sig", this.tokens[i].type)
+      // console.log("previous sig", this.tokens[i].type)
       return this.tokens[i].type === type
     }
     return false;
   }
   popContext() {
     // console.log("closing bracket, leaving context:", this.top._id)
-    this.stack.pop()
+    const ctx = this.stack.pop()
+    if (ctx._items.length===0) { delete ctx._items }
+    if (!DEBUG) { delete ctx._inline }
     // console.log("STACK LEN", this.stack.length)
     // console.log("STACK", this.stack.map(x => x._id))
   }
@@ -80,30 +80,30 @@ export class Parser {
     // console.log("STACK", this.stack.map(x => x._id))
   }
   parse() {
-    this.data = this.newCollection()
-    this.data._id = "_root"
+    this.data = this.newCollection({id: "_root"})
     this.stack = [this.data]
     while (!this.isEOF) {
-      if (this.is("comment")) { this.skip(); continue }
-      if (this.is("whitespace")) { this.skip(); continue }
-      if (this.is("newline")) { this.skip(); continue }
+      if (this.is("comment")) { this.advance(); continue }
+      if (this.is("whitespace")) { this.advance(); continue }
+      if (this.is("newline")) { this.advance(); continue }
       if (this.is("global")) { this.parseGlobal(); continue }
+
       if (this.is("closeBracket")) {
         if (this.stack.length === 1) {
           this.error("closing bracket, but no collection to close")
         }
-        this.eat("closeBracket")
+        this.advance()
         this.popContext()        
         
         continue
       }
-      // parseObject already should have opened a context
-      // on the stack for us, so we just need to skip over this
+
       if (this.is("openBracket")) {
-        this.eat("openBracket")
+        this.advance()
         if (this.top._inline) { this.top._inline = false }
         continue
       }
+
       if (this.is("openParen")) {
         // console.log("FOUND OPEN PAREN")
         let tokens = this.eatExpression();
@@ -114,11 +114,12 @@ export class Parser {
         }
         continue
       }
-      // end of a non {} item/line
+
+      // end of a non {} block item/line
       // although these are also allowed to fllow after the {} also
       if (this.is("semicolon")) {
         let canSafelyIgnore = this.isPreviousSig("closeBracket")
-        this.eat("semicolon")
+        this.advance()
         if (canSafelyIgnore) {
           console.log("safely ignoring ;")
           continue;
@@ -132,13 +133,15 @@ export class Parser {
         }
         continue
       }
+
       // unnamed object
       if (this.is("colon")) {
-        this.parseObject(null)
+        this.parseObject({id: null})
         continue
       }
+
       if (this.is("ident")) {
-        let name = this.consume().raw
+        let id = this.consume().raw
         this.eatWS()
         // TODO: FIX THIS, it's a huge hack
         while (this.isSig("comma","ident")) {
@@ -149,18 +152,17 @@ export class Parser {
           this.eatWS()
         }
         if (this.is("colon")) {
-          this.parseObject(name)
+          this.parseObject({id})
         } else if (this.is("pointer")) {
-          this.parseIdentPointerValue(name)
+          this.parseIdentPointerValue(id)
         } else if (this.is("assignment")) {
-          this.parseIdentEqualsValue(name)
+          this.parseIdentEqualsValue(id)
         } else if (this.is("openBracket")) {
-          this.skip()
-          console.log("open bracket for context: ", name)
-          let collection = this.newCollection()
-          collection._id = name
+          this.advance()
+          console.log("open bracket for context: ", id)
+          let collection = this.newCollection({id})
           collection._inline = false
-          this.top[name] = collection
+          this.top[id] = collection
           this.pushContext(collection)
           continue
         } else {
@@ -199,7 +201,7 @@ export class Parser {
         if (this.is("openParen")) { depth+=1 }
         // console.log("inside expr", this.peek(), depth)
         tokens.push(this.peek())
-        this.skip()  
+        this.advance()  
       }
       tokens.push(this.peek())
       this.eat("closeParen")
@@ -212,8 +214,8 @@ export class Parser {
       this.error("expecting a () expression");
     }
   }
-  parseObject(id) {
-    this.skip()
+  parseObject({id}) {
+    this.advance()
     this.eatWS()
     let type = this.eat("ident")
     this.eatWS()
@@ -243,7 +245,7 @@ export class Parser {
       while (!this.isEOF) {
         if (this.is("closeArray")) break;
         tokens.push(this.peek())
-        this.skip()
+        this.advance()
       }
       tokens.push(this.peek())
       this.eat("closeArray")
@@ -255,7 +257,7 @@ export class Parser {
     this.error("expecting string or array for assignment")
   }
   parseIdentEqualsValue(name) {
-    this.skip() // assignment
+    this.advance() // assignment
     this.eatWS()
 
     let s = this.parseStringOrArray()
@@ -266,7 +268,7 @@ export class Parser {
     this.top[name] = s
   }
   parseIdentPointerValue(name) {
-    this.skip() // pointer
+    this.advance() // pointer
     this.eatWS()
 
     let s = this.eatExpression()
