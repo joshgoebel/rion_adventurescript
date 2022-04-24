@@ -62,14 +62,18 @@ test('globals', () => {
 test('comments', () => {
   let s = `
   # signal
+  x
   // more than life
+  y
   /* how are you */
   `.trim()
   
   expect(lexType(s)).toEqual(
     [
       "comment",
+      "ident",
       "comment",
+      "ident",
       "comment"
     ])
 })
@@ -188,6 +192,22 @@ expect(lexType(s)).toEqual(
   ])
 })
 
+// nothing special here, just a string
+test("global reference in unquoted string", () => {
+  let s = 'x = ${{__booger}}'
+
+  expect(lexType(s)).toEqual(
+    [
+      "ident", "assignment", "string"
+    ])
+  let tokens = lex(s)
+  expect(tokens.pop()).toEqual({
+    type: "string",
+    quoted: false,
+    raw: "${{__booger}}"
+  })
+})
+
 // TODO should this be tokenize as a single entity reference?
 test("global reference outside string", () => {
   let s = '${{__booger}}'
@@ -197,4 +217,32 @@ test("global reference outside string", () => {
       "dollar", "openBracket", "openBracket","global", 
       "closeBracket","closeBracket"
     ])
+})
+
+test("unquoted key/value string", () => {
+  let s = `
+  bob = This is an\\sunquoted string
+  `
+
+  expect(lexType(s)).toEqual(
+    [
+      "ident",
+      "assignment",
+      "string"
+    ])
+  let tokens = lex(s)
+  expect(tokens.pop()).toEqual({
+    type: "string",
+    quoted: false,
+    raw: "This is an\\sunquoted string"
+  })
+})
+test("unknown", () => {
+  let s = `
+  ~ x ~
+`
+expect(lexType(s)).toEqual(
+  [
+    "unknown", "ident", "unknown"
+  ])
 })
