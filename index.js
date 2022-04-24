@@ -17,7 +17,7 @@ for (const t of tokens) {
 
 const parser = new Parser(lexer)
 parser.parse()
-// console.dir(parser.data, {depth: null})
+console.dir(parser.data, {depth: null})
 console.log()
 const printer = new Printer(parser.data)
 printer.print()

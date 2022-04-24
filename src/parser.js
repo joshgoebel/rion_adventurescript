@@ -126,7 +126,7 @@ export class Parser {
         }
 
         if (this.top._inline) {
-          console.log("semicolon!")
+          //console.log("semicolon!")
           this.popContext()
         } else {
           console.log("safely ignoring, not inline")
@@ -284,7 +284,7 @@ export class Parser {
     this.eatWS()
     this.eat("assignment")
     this.eatWS()
-    this.data[name] = this.consume().raw
+    this.data[name] = this.consume()
   }
   raiseExpected(type) {
     console.log("unexpected token: ", this.peek())

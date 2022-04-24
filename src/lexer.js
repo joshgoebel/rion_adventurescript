@@ -2,6 +2,7 @@
 const SIMPLE_TOKENS = [
   [ "comment", /#.*(?=\n)/ ],
   [ "comment", /\/\/.*(?=\n)/ ],
+  // TODO: is more complex parsing needed here for comments inside comments?
   [ "comment", /\/\*.*?\*\// ],
   [ "global", /__[a-z]+[a-z0-9_]*/ ],
   [ "ident", /[a-z]+[a-z_0-9]*/ ],
@@ -38,14 +39,16 @@ const SIMPLE_TOKENS = [
 export class Lexer {
 	constructor(source) {
 		this.source = source
-		this.tokens = []
 	}
+  get isEOF() {
+    return this.remaining.length === 0
+  }
 	lex() {
-    let processed = false
+    this.tokens = []
 		this.remaining = this.source
 		this.position = 0
-		while (this.remaining.length > 0) {
-      processed = false
+		next_token: 
+    while (!this.isEOF) {
 
       if (this.peek(/"/)) {
         this.lexLiteralString();
@@ -57,20 +60,19 @@ export class Lexer {
       }
 
       // simple tokens
-      for (const [type,match] of SIMPLE_TOKENS) {
-        if (this.peek(match)) {
-          this.tokenize(type, match)
-          processed = true
-          break;
-        }
+      for (const [type, regex] of SIMPLE_TOKENS) {
+        if (!this.peek(regex)) { continue }
+        
+        this.tokenize(type, regex)
+        continue next_token
+        break;
       }
-      if (processed) { continue };
 
       // unknown
       this.tokenize("unknown", /./)
 		}
 	}
-  eatWhitespace() {
+  tokenizeWS() {
     while (this.peek(/\s/)) {
       if (this.peek(/\n/)) { 
         this.tokenize("newline", /\n/) 
@@ -81,7 +83,7 @@ export class Lexer {
   }
   lexAssignment() {
     this.tokenize("assignment",/=/)
-    this.eatWhitespace();
+    this.tokenizeWS();
     // for normal brackets or string literals or arrays, 
     // we don't nede special handling
     if (this.peek(/\{|\"|\[/)) return;
@@ -92,74 +94,62 @@ export class Lexer {
       return;
     }
 
-    // string is until end of line
-    this.tokenize("string", /[^\n]+/)
+    // unquoted string is until end of line
+    this.tokenize("string", /[^\n]+/, {quoted: false})
   }
   lexLiteralString() {
-    let buff = "";
-    buff += `"`;
-    this.consume(/"/);
-    while (this.remaining.length > 0) {
-      // end
-      if (this.peek(/"/)) {
-        buff += `"`;
-        this.consume(/"/);
-        break;
-      } else if (this.peek(/\\/)) {
+    let buff = ""
+    buff += this.consume(/"/)
+    while (!this.isEOF) {
+      if (this.peek(/"/)) { break } 
+
+      if (this.peek(/\\/)) {
         buff += this.consume(/\\./)
       } else {
         buff += this.consume(/./)
       }
     }
+
+    buff += this.consume(/"/)
     this.tokens.push({
       type: "string",
+      quoted: true,
       raw: buff
     })
   }
-	tokenize(type, match) {
+	tokenize(type, match, opts = {}) {
 		// if (!this.peek(match)) return;
-    let data = {
+    let result = {
 			type,
 			raw: this.consume(match),
+      ...opts
 		}
     if (type==="unknown") {
       let context = this.source.slice(this.position-10, this.position+10)
-      data.context = context
+      result.context = context
     }
-		this.tokens.push(data)
+		this.tokens.push(result)
 	}
 	peek(x) {
 		const re = new RegExp("^" + x.source)
-    // const re = x
-    re.lastIndex = 0
 		const match = re.exec(this.remaining)
-    // if (match) {
-    //   console.log(match.index, match[0])
-    // }
 		if (match && match.index === 0) {
-			// console.log(match[0])
 			return match[0];
 		} else {
 			return null
 		}
 	}
-	consume(x) {
-		let str = this.peek(x)
-		if (str) {
-			// console.log(this.remaining.length)
-			this.remaining = this.remaining.slice(str.length)
-			this.position += str.length
-			return str
+	consume(re) {
+		let result = this.peek(re)
+		if (result) {
+			this.remaining = this.remaining.slice(result.length)
+			this.position += result.length
+			return result
 		} else {
-			console.log("no match")
-			console.log("Remaining: ", this.remaining.length)
-			console.log("next up: ", this.remaining.slice(0, 5))
-			throw ("error");
+			console.log("failed to consume", re)
+			console.log("Remaining len: ", this.remaining.length)
+			console.log("next up: ", this.remaining.slice(0, 10))
+			throw("error");
 		}
-
 	}
-
-
-
-
 }

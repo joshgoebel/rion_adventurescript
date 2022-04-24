@@ -1,3 +1,5 @@
+const INTERNAL_RE = /^_[a-z]/
+
 export class Printer {
   constructor(data) {
     this.data = data
@@ -6,25 +8,23 @@ export class Printer {
   writeIndent() {
     this.out += "".padStart(this.indent, " ")
   }
+
   writeLine(s) {
     this.writeIndent()
     this.out += `${s}\n`
   }
+
   write(s) {
     this.out += `${s}`
   }
+
   print() {
     this.out = ""
     for (let [key, data] of Object.entries(this.data)) {
-      if (key === "_id") continue;
-      if (key === "_items") continue;
+      if (INTERNAL_RE.test(key)) continue;
 
-      if (key.startsWith("__")) {
-        this.writeLine(`${key} = ${data}`)
-        continue
-      }
-
-      if (data._token) {
+      // globals and top-level key/values
+      if (key.startsWith("__") || data._token) {
         this.writeLine(`${key} = ${data.raw}`)
         continue
       }
@@ -32,7 +32,9 @@ export class Printer {
       this.printSection(key,data)
     }
     console.log(this.out)
+    return this.out
   }
+
   isSection(item) {
     if (item._array) return false;
     if (item._token) return false;
@@ -42,10 +44,11 @@ export class Printer {
 
     return true
   }
+
   printItem(item) {
     this.writeIndent()
     this.write(`${item._id ? item._id : ""}:${item._type}`)
-    console.log(item)
+    //console.log(item)
 
     if (item._value) {
       if (Array.isArray(item._value)) { 
@@ -92,9 +95,10 @@ export class Printer {
       this.writeLine("}")
     }
   }
+
   printValue(k,v) {
     if (Array.isArray(v)) {
-      console.log(v)
+      // console.log(v)
       let ass = v[0].type === "openParen" ? "->" : "="
       let out = v.map(x => x.raw).join("")
       this.writeLine(`${k} ${ass} ${out}`)
@@ -105,34 +109,34 @@ export class Printer {
       this.writeLine(`${k} = ${v.raw}`)
     }
   }
-  printSection(name, data) {
-    this.writeLine(`${name} {`)
+
+  indentedSection(prefix, fn) {
+    this.writeLine(`${prefix} {`)
     this.indent += 2
-    if (data._items?.length > 0) {
-      data._items.forEach(item => this.printItem(item))
-      this.indent -= 2
-      this.writeLine(`}\n`)
-      return;
-    }
-
-    for (let [key, value] of Object.entries(data)) {
-      if (key.startsWith("_")) continue;
-
-      if (this.isSection(value)) {
-        this.printSection(key, value)
-        continue
-      }
-
-      this.printValue(key, value)
-      // if (value?._token) {
-      //   this.writeLine(`${key} = ${value.raw}`)
-      //   continue
-      // }
-
-      // this.writeLine(`${key} = ${value}`)
-    }
-
+    fn()
     this.indent -= 2
     this.writeLine(`}\n`)
+  }
+
+  printSection(name, data) {
+    this.indentedSection(name, () => {
+      // sequence of items
+      if (data._items?.length > 0) {
+        data._items.forEach(item => this.printItem(item))
+        return;
+      }
+  
+      // key/value pairings, including sections
+      for (let [key, value] of Object.entries(data)) {
+        if (key.startsWith("_")) continue; 
+  
+        if (this.isSection(value)) {
+          this.printSection(key, value)
+          continue
+        }
+  
+        this.printValue(key, value)
+      }  
+    })
   }
 }
