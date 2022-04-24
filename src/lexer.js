@@ -16,7 +16,7 @@ const SIMPLE_TOKENS = [
   [ "openArray", /\[/ ],
   [ "closeArray", /\]/ ],
   [ "pointer", /\->/ ],
-  [ "notEquality", /!=/ ],
+  [ "notEqual", /!=/ ],
   [ "equality", /==/ ],
   [ "and", /&&/ ],
   [ "number", /\d+/ ],
@@ -39,6 +39,7 @@ const SIMPLE_TOKENS = [
 export class Lexer {
 	constructor(source) {
 		this.source = source
+    this.remaining = this.source
 	}
   get isEOF() {
     return this.remaining.length === 0
